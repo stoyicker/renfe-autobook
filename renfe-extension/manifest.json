@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Renfe Easy Booking",
+  "version": "1.0.0",
+  "description": "Automates Renfe train ticket booking from the omnibox. Type 'renfe go 15apr return 20apr' to start.",
+  "permissions": [
+    "storage",
+    "notifications",
+    "scripting",
+    "activeTab",
+    "downloads"
+  ],
+  "host_permissions": [
+    "*://*.renfe.com/*"
+  ],
+  "omnibox": {
+    "keyword": "renfe"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.renfe.com/*"],
+      "js": ["config.js", "selectors.js", "recorder.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Renfe Easy Booking"
+  },
+  "icons": {}
+}
