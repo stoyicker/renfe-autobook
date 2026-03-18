@@ -266,11 +266,13 @@
   }
 
   /**
-   * Navigate the calendar forward or backward until the target month is visible.
+   * Navigate the calendar until a target month is visible on either panel.
+   * Arrows move 2 months at a time.
    */
-  async function navigateToMonth(targetMonth, targetYear) {
+  async function navigateToMonthVisible(targetMonth, targetYear) {
     let attempts = 0;
-    const maxAttempts = 24; // 2 years max
+    const maxAttempts = 24;
+    const targetVal = targetYear * 12 + targetMonth;
 
     while (attempts < maxAttempts) {
       const visible = getVisibleMonths();
@@ -280,28 +282,26 @@
         continue;
       }
 
-      // Check if target month is already visible
-      const found = visible.some(v => v.monthIndex === targetMonth && v.year === targetYear);
-      if (found) {
+      // Check if target is visible on either panel
+      if (visible.some(v => v.monthIndex === targetMonth && v.year === targetYear)) {
         console.log(`[Renfe] Month ${targetMonth}/${targetYear} is visible`);
         return;
       }
 
-      // Determine direction: compare target with first visible month
-      const first = visible[0];
-      const targetVal = targetYear * 12 + targetMonth;
-      const currentVal = first.year * 12 + first.monthIndex;
+      const leftVal = visible[0].year * 12 + visible[0].monthIndex;
 
-      if (targetVal > currentVal) {
-        // Click next
+      if (targetVal > leftVal) {
         const nextBtn = $(SEL.nextMonthBtn);
         if (!nextBtn) throw new Error('Next month button not found');
-        nextBtn.click();
+        nextBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        nextBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        nextBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       } else {
-        // Click prev
         const prevBtn = $(SEL.prevMonthBtn);
         if (!prevBtn) throw new Error('Previous month button not found');
-        prevBtn.click();
+        prevBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        prevBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        prevBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }
 
       await delay(400);
@@ -427,13 +427,15 @@
     }
 
     // --- Select outbound date ---
-    await navigateToMonth(outboundDate.month, outboundDate.year);
+    await navigateToMonthVisible(outboundDate.month, outboundDate.year);
     await delay(300);
     await clickDay(outboundDate.day, outboundDate.month, outboundDate.year);
     console.log(`[Renfe] Outbound date selected: ${outboundDate.day}/${outboundDate.month}/${outboundDate.year}`);
 
-    // --- Select return date (must be after outbound) ---
-    await navigateToMonth(returnDate.month, returnDate.year);
+    await delay(300);
+
+    // --- Select return date (navigate again if in a different month) ---
+    await navigateToMonthVisible(returnDate.month, returnDate.year);
     await delay(300);
     await clickDay(returnDate.day, returnDate.month, returnDate.year);
     console.log(`[Renfe] Return date selected: ${returnDate.day}/${returnDate.month}/${returnDate.year}`);

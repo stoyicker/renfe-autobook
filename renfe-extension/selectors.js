@@ -47,9 +47,9 @@ const SELECTORS = {
   monthLabelRange: 'span.rf-daterange-alternative__month-label',
   monthLabelPicker: 'span.rf-daterange-picker-alternative__month-label',
 
-  // Navigation arrows
-  nextMonthBtn: 'button.lightpick__next-action',
-  prevMonthBtn: 'button.lightpick__previous-action',
+  // Navigation arrows (full path from recording, with short fallback)
+  nextMonthBtn: '#daterangev2 button.lightpick__next-action, #datepickerv2 button.lightpick__next-action, button.lightpick__next-action',
+  prevMonthBtn: '#daterangev2 button.lightpick__previous-action, #datepickerv2 button.lightpick__previous-action, button.lightpick__previous-action',
 
   // Day cells
   dayCell: 'div.lightpick__day',
