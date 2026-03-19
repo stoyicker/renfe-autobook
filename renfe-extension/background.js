@@ -265,7 +265,7 @@ function parseOmniboxInput(text) {
   // 5. Parse dates
   const outboundDate = parseLooseDate(outboundRaw);
   if (!outboundDate) {
-    return { ok: false, error: `No entendí la fecha de ida: "${outboundRaw}"\n\nFormatos válidos: 15apr, 15/04, april 15` };
+    return { ok: false, error: `Could not parse outbound date: "${outboundRaw}"\n\nValid formats: 15apr, 15/04, april 15` };
   }
 
   let returnDate = null;
@@ -273,7 +273,7 @@ function parseOmniboxInput(text) {
     if (returnRaw) {
       returnDate = parseLooseDate(returnRaw);
       if (!returnDate) {
-        return { ok: false, error: `No entendí la fecha de vuelta: "${returnRaw}"\n\nFormatos válidos: 20apr, 20/04, april 20` };
+        return { ok: false, error: `Could not parse return date: "${returnRaw}"\n\nValid formats: 20apr, 20/04, april 20` };
       }
     } else {
       // Default return date = same as outbound
@@ -302,13 +302,13 @@ function parseOmniboxInput(text) {
       outboundDate.month === returnDate.month &&
       outboundDate.year === returnDate.year &&
       outboundTime === returnTime) {
-    return { ok: false, error: `Ida y vuelta el mismo día (${outboundDate.day}/${outboundDate.month}) con el mismo horario (${outboundTime}).\n\nUsa morning/evening para diferenciar.` };
+    return { ok: false, error: `Round trip on the same day (${outboundDate.day}/${outboundDate.month}) with the same time preference (${outboundTime}).\n\nUse morning/evening to differentiate.` };
   }
 
   // 8. Parse travellers
   const travellers = parseTravellers(travellerText);
   if (!travellers) {
-    return { ok: false, error: 'Falta quién viaja.\n\nEjemplos: mom and me, dad and me, my parents and me, all 3, me' };
+    return { ok: false, error: 'Missing travellers.\n\nExamples: mom and me, dad and me, my parents and me, all 3, me' };
   }
 
   return {

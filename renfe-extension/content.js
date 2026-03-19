@@ -115,7 +115,7 @@
   }
 
   async function fail(stepName, reason) {
-    const detail = `Error en paso "${stepName}": ${reason}`;
+    const detail = `Error in step "${stepName}": ${reason}`;
     await chrome.storage.session.set({ renfeState: 'ERROR' });
     chrome.runtime.sendMessage({ type: 'SHOW_ERROR', error: detail });
   }
@@ -496,7 +496,7 @@
     const target = parseInt(passengerCount, 10);
     const match = btnText.match(/(\d+)/);
     if (!match) {
-      throw new Error(`No se pudo leer la cantidad de pasajeros actual. Texto del botón: "${btnText}"`);
+      throw new Error(`Could not read current passenger count. Button text: "${btnText}"`);
     }
     const current = parseInt(match[1], 10);
 
@@ -593,7 +593,7 @@
     if (!isLoggedIn()) {
       chrome.runtime.sendMessage({
         type: 'SHOW_ERROR',
-        error: 'No hay sesión activa en Renfe. Inicia sesión primero y vuelve a intentarlo.'
+        error: 'No active session on Renfe. Log in first and try again.'
       });
       await setState('DONE');
       return;
