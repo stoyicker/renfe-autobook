@@ -650,16 +650,128 @@
     }
   }
 
-  // --- Placeholder state handlers (not yet implemented from recordings) ------
+  // --- Trip selection ---------------------------------------------------------
 
-  async function selectOutboundTrain() {
-    console.log('[Renfe] SELECT_OUTBOUND_TRAIN — not yet implemented (need recordings)');
-    await fail('SELECT_OUTBOUND_TRAIN', 'Este paso aún no está implementado. Necesitamos grabar la selección de trenes.');
+  /**
+   * Parse departure time from a train row's aria-label.
+   * The span inside the first child div has aria-label like:
+   *   "Tren con salida a las hh:mm y llegada a..."
+   * Returns the hour as an integer, or null if unparseable.
+   */
+  function getTrainDepartureHour(trainEl) {
+    const firstDiv = trainEl.querySelector('div');
+    if (!firstDiv) return null;
+    const span = firstDiv.querySelector('span[aria-label]');
+    if (!span) return null;
+    const label = span.getAttribute('aria-label') || '';
+    const m = label.match(/salida a las (\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    return parseInt(m[1], 10);
   }
 
-  async function selectReturnTrain() {
-    console.log('[Renfe] SELECT_RETURN_TRAIN — not yet implemented');
-    await fail('SELECT_RETURN_TRAIN', 'Este paso aún no está implementado.');
+  /**
+   * Determine if a train is "morning" or "evening" based on departure hour.
+   * Before 13:00 = morning, 13:00+ = evening.
+   */
+  function trainTimeCategory(trainEl) {
+    const hour = getTrainDepartureHour(trainEl);
+    if (hour === null) return null;
+    return hour < 13 ? 'morning' : 'evening';
+  }
+
+  /**
+   * Select a trip (outbound or return) on the results page.
+   * @param {string} timePreference - 'morning' or 'evening'
+   * @param {string} leg - 'outbound' or 'return' (for error messages)
+   */
+  async function selectTrip(timePreference, leg) {
+    await delay(2000); // let the page settle
+
+    // outbound uses "i" (ida), return uses "v" (vuelta)
+    const prefix = leg === 'return' ? 'v' : 'i';
+
+    // Find available trains
+    const train1 = document.querySelector(`#tren_${prefix}_1`);
+    const train2 = document.querySelector(`#tren_${prefix}_2`);
+
+    if (!train1) {
+      throw new Error(`No trains found for ${leg} trip.`);
+    }
+
+    // Build list of available trains with their time categories
+    const trains = [];
+    trains.push({ el: train1, category: trainTimeCategory(train1), id: `tren_${prefix}_1` });
+    if (train2) {
+      trains.push({ el: train2, category: trainTimeCategory(train2), id: `tren_${prefix}_2` });
+    }
+
+    console.log(`[Renfe] Found ${trains.length} train(s) for ${leg}:`,
+      trains.map(t => `${t.id} → ${t.category}`).join(', '));
+
+    // Find the matching train
+    const match = trains.find(t => t.category === timePreference);
+    if (!match) {
+      const available = trains.map(t => `${t.id} (${t.category})`).join(', ');
+      throw new Error(`No ${timePreference} train available for ${leg}. Available: ${available}`);
+    }
+
+    // Verify we could read the time for the matched train
+    if (match.category === null) {
+      throw new Error(`Could not determine departure time for ${match.id} on ${leg} trip.`);
+    }
+
+    console.log(`[Renfe] Selecting ${match.id} (${match.category}) for ${leg}`);
+
+    // Click the train row's first child to expand it
+    const clickTarget = match.el.firstElementChild || match.el;
+    clickTarget.click();
+    await delay(1000);
+
+    // Click the fare div with data-cod-tarifa="N1010"
+    const fareDiv = match.el.querySelector('div[data-cod-tarifa="N1010"]');
+    if (!fareDiv) {
+      throw new Error(`Fare N1010 not found inside ${match.id}. Check available fares.`);
+    }
+    fareDiv.click();
+    console.log(`[Renfe] Selected fare N1010 on ${match.id}`);
+    await delay(500);
+
+    // Click the confirm button
+    const selectBtn = document.querySelector('#btnSeleccionar');
+    if (!selectBtn) {
+      throw new Error('btnSeleccionar button not found');
+    }
+    selectBtn.click();
+    console.log(`[Renfe] Confirmed ${leg} trip selection`);
+    await delay(500);
+
+    // Optionally dismiss popup (may appear after clicking btnSeleccionar)
+    const popupCloseBtn = document.querySelector('#modalInciConf_i_1 button.close.close-editado');
+    if (popupCloseBtn) {
+      popupCloseBtn.click();
+      console.log('[Renfe] Dismissed trip selection popup');
+      await delay(500);
+    }
+  }
+
+  async function selectOutboundTrain(outboundTime, returnTime) {
+    try {
+      await selectTrip(outboundTime, 'outbound');
+
+      const data = await chrome.storage.session.get(['returnDate']);
+      if (data.returnDate) {
+        // Return trip list loads on the same page — wait for it to refresh
+        console.log('[Renfe] Waiting for return trip list to load...');
+        await delay(2000);
+        await waitFor(() => document.querySelector('#tren_v_1'), 15000);
+        await selectTrip(returnTime, 'return');
+      }
+
+      await setState('SELECT_TRAVELLERS');
+    } catch (err) {
+      console.error('[Renfe] selectOutboundTrain error:', err);
+      await fail('SELECT_OUTBOUND_TRAIN', err.message);
+    }
   }
 
   async function selectTravellers() {
@@ -681,7 +793,8 @@
 
   async function run() {
     const data = await chrome.storage.session.get([
-      'renfeState', 'outboundDate', 'returnDate', 'passengerCount', 'travellers', 'direction'
+      'renfeState', 'outboundDate', 'returnDate', 'outboundTime', 'returnTime',
+      'passengerCount', 'travellers', 'direction'
     ]);
 
     const state = data.renfeState;
@@ -705,11 +818,7 @@
         break;
 
       case 'SELECT_OUTBOUND_TRAIN':
-        await selectOutboundTrain();
-        break;
-
-      case 'SELECT_RETURN_TRAIN':
-        await selectReturnTrain();
+        await selectOutboundTrain(data.outboundTime || 'morning', data.returnTime || 'evening');
         break;
 
       case 'SELECT_TRAVELLERS':
