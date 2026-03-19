@@ -19,6 +19,33 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // --- Date parsing -----------------------------------------------------------
 
+const MONTHS = {
+  jan: 1, ene: 1, january: 1, enero: 1,
+  feb: 2, february: 2, febrero: 2,
+  mar: 3, march: 3, marzo: 3,
+  apr: 4, abr: 4, april: 4, abril: 4,
+  may: 5, mayo: 5,
+  jun: 6, june: 6, junio: 6,
+  jul: 7, july: 7, julio: 7,
+  aug: 8, ago: 8, august: 8, agosto: 8,
+  sep: 9, sept: 9, september: 9, septiembre: 9,
+  oct: 10, october: 10, octubre: 10,
+  nov: 11, november: 11, noviembre: 11,
+  dec: 12, dic: 12, december: 12, diciembre: 12
+};
+
+// Regex to collapse "apr 15" → "apr15" and "15 apr" → "15apr" before tokenizing
+const MONTH_NAMES_PAT = Object.keys(MONTHS).join('|');
+const DATE_GLUE_REGEX = new RegExp(
+  `\\b(${MONTH_NAMES_PAT})\\s+(\\d{1,2})\\b|\\b(\\d{1,2})\\s+(${MONTH_NAMES_PAT})\\b`, 'gi'
+);
+
+function glueDates(text) {
+  return text.replace(DATE_GLUE_REGEX, (_, m1, d1, d2, m2) =>
+    m1 ? m1 + d1 : d2 + m2
+  );
+}
+
 /**
  * Parse a loose date string into { day, month, year }.
  * Supported formats:
@@ -28,21 +55,6 @@ chrome.runtime.onInstalled.addListener(() => {
 function parseLooseDate(raw) {
   if (!raw) return null;
   raw = raw.trim().toLowerCase();
-
-  const MONTHS = {
-    jan: 1, ene: 1, january: 1, enero: 1,
-    feb: 2, february: 2, febrero: 2,
-    mar: 3, march: 3, marzo: 3,
-    apr: 4, abr: 4, april: 4, abril: 4,
-    may: 5, mayo: 5,
-    jun: 6, june: 6, junio: 6,
-    jul: 7, july: 7, julio: 7,
-    aug: 8, ago: 8, august: 8, agosto: 8,
-    sep: 9, sept: 9, september: 9, septiembre: 9,
-    oct: 10, october: 10, octubre: 10,
-    nov: 11, november: 11, noviembre: 11,
-    dec: 12, dic: 12, december: 12, diciembre: 12
-  };
 
   const year = new Date().getFullYear();
   let day, month;
@@ -182,7 +194,7 @@ function extractTime(text) {
  * or { ok: false, error }.
  */
 function parseOmniboxInput(text) {
-  text = text.trim().toLowerCase();
+  text = glueDates(text.trim().toLowerCase());
 
   // 1. Extract optional direction pair from the start
   let direction = 'from_hel'; // default
