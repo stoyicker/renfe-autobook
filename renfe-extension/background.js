@@ -308,7 +308,19 @@ function parseOmniboxInput(text) {
     }
   }
 
-  // 7. Validate: same date + same time on a return trip is an error
+  // 7. Validate day-of-month (after year rollover so leap years are correct)
+  function isValidDate(d) {
+    const test = new Date(d.year, d.month - 1, d.day);
+    return test.getFullYear() === d.year && test.getMonth() === d.month - 1 && test.getDate() === d.day;
+  }
+  if (!isValidDate(outboundDate)) {
+    return { ok: false, error: `Invalid outbound date: ${outboundDate.day}/${outboundDate.month}/${outboundDate.year} does not exist.` };
+  }
+  if (returnDate && !isValidDate(returnDate)) {
+    return { ok: false, error: `Invalid return date: ${returnDate.day}/${returnDate.month}/${returnDate.year} does not exist.` };
+  }
+
+  // 8. Validate: same date + same time on a return trip is an error
   if (returnDate &&
       outboundDate.day === returnDate.day &&
       outboundDate.month === returnDate.month &&
