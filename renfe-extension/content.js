@@ -403,12 +403,21 @@
    * Open the date picker, select trip mode, pick outbound and return dates, confirm.
    */
   async function selectDates(outboundDate, returnDate) {
-    // Check if both dates are already set correctly
+    const isRoundTrip = !!returnDate;
+
+    // Check if dates are already set correctly
     const firstInput = $(SEL.dateFirstInput);
     const secondInput = $(SEL.dateSecondInput);
-    if (dateInputMatches(firstInput, outboundDate) && dateInputMatches(secondInput, returnDate)) {
-      console.log('[Renfe] Dates already set correctly — skipping');
-      return;
+    if (isRoundTrip) {
+      if (dateInputMatches(firstInput, outboundDate) && dateInputMatches(secondInput, returnDate)) {
+        console.log('[Renfe] Dates already set correctly — skipping');
+        return;
+      }
+    } else {
+      if (dateInputMatches(firstInput, outboundDate)) {
+        console.log('[Renfe] Outbound date already set correctly — skipping');
+        return;
+      }
     }
 
     // Click the date input to open the picker
@@ -418,12 +427,21 @@
     dateInput.click();
     await delay(800);
 
-    // Always explicitly select round-trip mode (don't rely on default — could be cookie-saved)
-    const roundTripLabel = $(SEL.tripRoundLabel);
-    if (roundTripLabel) {
-      roundTripLabel.click();
-      console.log('[Renfe] Selected round-trip mode');
-      await delay(500);
+    // Explicitly select trip mode
+    if (isRoundTrip) {
+      const roundTripLabel = $(SEL.tripRoundLabel);
+      if (roundTripLabel) {
+        roundTripLabel.click();
+        console.log('[Renfe] Selected round-trip mode');
+        await delay(500);
+      }
+    } else {
+      const oneWayLabel = $(SEL.tripGoLabel);
+      if (oneWayLabel) {
+        oneWayLabel.click();
+        console.log('[Renfe] Selected one-way mode');
+        await delay(500);
+      }
     }
 
     // --- Select outbound date ---
@@ -432,13 +450,14 @@
     await clickDay(outboundDate.day, outboundDate.month, outboundDate.year);
     console.log(`[Renfe] Outbound date selected: ${outboundDate.day}/${outboundDate.month}/${outboundDate.year}`);
 
-    await delay(300);
-
-    // --- Select return date (navigate again if in a different month) ---
-    await navigateToMonthVisible(returnDate.month, returnDate.year);
-    await delay(300);
-    await clickDay(returnDate.day, returnDate.month, returnDate.year);
-    console.log(`[Renfe] Return date selected: ${returnDate.day}/${returnDate.month}/${returnDate.year}`);
+    // --- Select return date if round-trip ---
+    if (isRoundTrip) {
+      await delay(300);
+      await navigateToMonthVisible(returnDate.month, returnDate.year);
+      await delay(300);
+      await clickDay(returnDate.day, returnDate.month, returnDate.year);
+      console.log(`[Renfe] Return date selected: ${returnDate.day}/${returnDate.month}/${returnDate.year}`);
+    }
 
     // Click "Aceptar" to confirm dates
     await delay(300);
@@ -564,7 +583,7 @@
 
   // --- Fill search form (main orchestrator) -----------------------------------
 
-  async function fillSearchForm(outboundDate, returnDate, passengerCount) {
+  async function fillSearchForm(outboundDate, returnDate, passengerCount, direction) {
     await waitForLoading();
     dismissPopups();
 
@@ -580,14 +599,19 @@
       return;
     }
 
+    // Pick station config based on direction
+    // "from_hel" → outbound: Hellín → Albacete (CFG.go)
+    // "from_ab"  → outbound: Albacete → Hellín (CFG.return)
+    const stationCfg = direction === 'from_ab' ? CFG.return : CFG.go;
+
     try {
       // 1. Select origin station
       console.log('[Renfe] Step 1: Selecting origin station...');
       await selectStation(
         SEL.originInput,
         SEL.originDropdown,
-        CFG.go.origin.searchText,
-        CFG.go.origin.stationName
+        stationCfg.origin.searchText,
+        stationCfg.origin.stationName
       );
 
       // 2. Select destination station
@@ -595,11 +619,11 @@
       await selectStation(
         SEL.destinationInput,
         SEL.destinationDropdown,
-        CFG.go.destination.searchText,
-        CFG.go.destination.stationName
+        stationCfg.destination.searchText,
+        stationCfg.destination.stationName
       );
 
-      // 3. Select dates (opens calendar, picks round-trip, selects both dates)
+      // 3. Select dates
       console.log('[Renfe] Step 3: Selecting dates...');
       await selectDates(outboundDate, returnDate);
 
@@ -657,7 +681,7 @@
 
   async function run() {
     const data = await chrome.storage.session.get([
-      'renfeState', 'outboundDate', 'returnDate', 'passengerCount', 'travellers'
+      'renfeState', 'outboundDate', 'returnDate', 'passengerCount', 'travellers', 'direction'
     ]);
 
     const state = data.renfeState;
@@ -673,11 +697,11 @@
       case 'OPEN_RENFE':
         await setState('FILL_SEARCH_FORM');
         await delay(2000);
-        await fillSearchForm(data.outboundDate, data.returnDate, data.passengerCount || 1);
+        await fillSearchForm(data.outboundDate, data.returnDate, data.passengerCount || 1, data.direction);
         break;
 
       case 'FILL_SEARCH_FORM':
-        await fillSearchForm(data.outboundDate, data.returnDate, data.passengerCount || 1);
+        await fillSearchForm(data.outboundDate, data.returnDate, data.passengerCount || 1, data.direction);
         break;
 
       case 'SELECT_OUTBOUND_TRAIN':

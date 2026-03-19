@@ -130,55 +130,98 @@ function parseTravellers(text) {
 
 /**
  * Parse the full omnibox text.
- * Format: "go <date> return <date> <travellers>"
- * Also: "ida <date> vuelta <date> <travellers>"
+ *
+ * Format: [from/to hel/ab] <date> [return <date>] <travellers>
+ *
+ * Direction pair (optional, default "from hel"):
+ *   "from hel" / "to ab"  → outbound: Hellín → Albacete
+ *   "from ab"  / "to hel" → outbound: Albacete → Hellín
+ *   Return trip always flips the stations.
  *
  * Examples:
- *   "go 15apr return 20apr mom and me"
- *   "go 15/04 return 20/04 all 3"
- *   "ida 15abr vuelta 20abr mis padres y yo"
+ *   "15apr return 20apr mom and me"           → from hel (default)
+ *   "from hel 15apr return 20apr mom and me"
+ *   "to ab 15apr return 20apr all 3"
+ *   "from ab 15/04 return 20/04 dad and me"
+ *   "15apr mom"                               → one-way, from hel
  *
- * Returns { ok, outboundDate, returnDate, travellers, passengerCount }
- * or { ok: false, error: "reason" }.
+ * Returns { ok, outboundDate, returnDate, direction, travellers, passengerCount }
+ * or { ok: false, error }.
  */
 function parseOmniboxInput(text) {
   text = text.trim().toLowerCase();
 
-  // Match: go <date> return <date> [traveller text]
-  const pattern = /(?:go|ida)\s+(.+?)\s+(?:return|vuelta)\s+(\S+)(?:\s+(.+))?/;
-  const m = text.match(pattern);
-  if (!m) {
-    return { ok: false, error: 'Usage: go 15apr return 20apr mom and me' };
+  // 1. Extract optional direction pair from the start
+  // "from hel", "from ab", "to hel", "to ab"
+  let direction = 'from_hel'; // default
+  const dirPattern = /^(from|to)\s+(hel|ab)\s+/;
+  const dirMatch = text.match(dirPattern);
+  if (dirMatch) {
+    const verb = dirMatch[1];  // from/to
+    const station = dirMatch[2]; // hel/ab
+    // "from hel" or "to ab" → outbound leaves Hellín
+    // "from ab" or "to hel" → outbound leaves Albacete
+    if ((verb === 'from' && station === 'hel') || (verb === 'to' && station === 'ab')) {
+      direction = 'from_hel';
+    } else {
+      direction = 'from_ab';
+    }
+    text = text.substring(dirMatch[0].length);
   }
 
-  const outboundDate = parseLooseDate(m[1]);
-  const returnDate = parseLooseDate(m[2]);
+  // 2. Try to match: <outbound_date> return <return_date> <travellers>
+  let outboundRaw, returnRaw, travellerText;
 
+  const roundPattern = /^(.+?)\s+(?:return|vuelta)\s+(\S+)(?:\s+(.+))?$/;
+  const roundMatch = text.match(roundPattern);
+
+  if (roundMatch) {
+    outboundRaw = roundMatch[1];
+    returnRaw = roundMatch[2];
+    travellerText = roundMatch[3] || '';
+  } else {
+    // One-way: <outbound_date> <travellers>
+    // First token is the date, rest is travellers
+    const parts = text.match(/^(\S+)(?:\s+(.+))?$/);
+    if (!parts) {
+      return { ok: false, error: 'Usage: [from/to hel/ab] 15apr [return 20apr] mom and me' };
+    }
+    outboundRaw = parts[1];
+    returnRaw = null;
+    travellerText = parts[2] || '';
+  }
+
+  // 3. Parse dates
+  const outboundDate = parseLooseDate(outboundRaw);
   if (!outboundDate) {
-    return { ok: false, error: `No entendí la fecha de ida: "${m[1]}"\n\nFormatos válidos: 15apr, 15/04, april 15` };
-  }
-  if (!returnDate) {
-    return { ok: false, error: `No entendí la fecha de vuelta: "${m[2]}"\n\nFormatos válidos: 20apr, 20/04, april 20` };
+    return { ok: false, error: `No entendí la fecha de ida: "${outboundRaw}"\n\nFormatos válidos: 15apr, 15/04, april 15` };
   }
 
-  // Smart year rollover:
-  // 1. If outbound date is in the past, bump it to next year
+  let returnDate = null;
+  if (returnRaw) {
+    returnDate = parseLooseDate(returnRaw);
+    if (!returnDate) {
+      return { ok: false, error: `No entendí la fecha de vuelta: "${returnRaw}"\n\nFormatos válidos: 20apr, 20/04, april 20` };
+    }
+  }
+
+  // 4. Smart year rollover
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const outboundJs = new Date(outboundDate.year, outboundDate.month - 1, outboundDate.day);
   if (outboundJs < today) {
     outboundDate.year++;
   }
-  // 2. If return date is before outbound, it must be next year
-  const returnJs = new Date(returnDate.year, returnDate.month - 1, returnDate.day);
-  const outboundJsFixed = new Date(outboundDate.year, outboundDate.month - 1, outboundDate.day);
-  if (returnJs < outboundJsFixed) {
-    returnDate.year++;
+  if (returnDate) {
+    const returnJs = new Date(returnDate.year, returnDate.month - 1, returnDate.day);
+    const outboundJsFixed = new Date(outboundDate.year, outboundDate.month - 1, outboundDate.day);
+    if (returnJs < outboundJsFixed) {
+      returnDate.year++;
+    }
   }
 
-  const travellerText = m[3] || '';
+  // 5. Parse travellers
   const travellers = parseTravellers(travellerText);
-
   if (!travellers) {
     return { ok: false, error: 'Falta quién viaja.\n\nEjemplos: mom and me, dad and me, my parents and me, all 3, me' };
   }
@@ -187,6 +230,7 @@ function parseOmniboxInput(text) {
     ok: true,
     outboundDate,
     returnDate,
+    direction,
     travellers,
     passengerCount: travellers.length
   };
@@ -300,6 +344,7 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
     renfeState: 'OPEN_RENFE',
     outboundDate: parsed.outboundDate,
     returnDate: parsed.returnDate,
+    direction: parsed.direction,
     travellers: parsed.travellers,
     passengerCount: parsed.passengerCount,
     errorCount: 0
