@@ -126,41 +126,71 @@ function parseTravellers(text) {
   return travellers.length > 0 ? travellers : null;
 }
 
+// --- Time preference parsing -------------------------------------------------
+
+const TIME_WORDS = {
+  morning: 'morning', mañana: 'morning', manana: 'morning', am: 'morning',
+  evening: 'evening', night: 'evening', eve: 'evening', noche: 'evening',
+  tarde: 'evening', pm: 'evening'
+};
+const TIME_REGEX = new RegExp(`\\b(${Object.keys(TIME_WORDS).join('|')})\\b`);
+
+/**
+ * Extract a time preference from a string, returning { time, rest }.
+ * `time` is 'morning' or 'evening' or null if not found.
+ * `rest` is the string with the time word removed.
+ */
+function extractTime(text) {
+  const m = text.match(TIME_REGEX);
+  if (!m) return { time: null, rest: text };
+  return {
+    time: TIME_WORDS[m[1]],
+    rest: (text.substring(0, m.index) + text.substring(m.index + m[0].length)).replace(/\s+/g, ' ').trim()
+  };
+}
+
 // --- Full omnibox parsing ----------------------------------------------------
 
 /**
  * Parse the full omnibox text.
  *
- * Format: [from/to hel/ab] <date> [return <date>] <travellers>
+ * Format: [from/to hel/ab] <date> [morning/evening] [return [<date>] [morning/evening]] <travellers>
  *
  * Direction pair (optional, default "from hel"):
  *   "from hel" / "to ab"  → outbound: Hellín → Albacete
  *   "from ab"  / "to hel" → outbound: Albacete → Hellín
  *   Return trip always flips the stations.
  *
- * Examples:
- *   "15apr return 20apr mom and me"           → from hel (default)
- *   "from hel 15apr return 20apr mom and me"
- *   "to ab 15apr return 20apr all 3"
- *   "from ab 15/04 return 20/04 dad and me"
- *   "15apr mom"                               → one-way, from hel
+ * Time preference (optional):
+ *   morning (aliases: mañana, am) / evening (aliases: night, eve, noche, tarde, pm)
+ *   Default outbound: morning. Default return: evening.
  *
- * Returns { ok, outboundDate, returnDate, direction, travellers, passengerCount }
+ * Return date is optional — defaults to same date as outbound.
+ *   "15apr return mom and me" → outbound 15apr morning, return 15apr evening
+ *
+ * Validation: error if same date AND same time preference on a return trip.
+ *
+ * Examples:
+ *   "15apr return 20apr mom and me"                → morning/evening defaults
+ *   "15apr evening return 20apr morning all 3"     → explicit times
+ *   "15apr return mom and me"                      → same-day round trip
+ *   "15apr return evening mom and me"              → same-day, outbound morning (default), return evening
+ *   "from ab 15/04 return 20/04 dad and me"
+ *   "15apr mom"                                    → one-way, morning default
+ *
+ * Returns { ok, outboundDate, returnDate, outboundTime, returnTime, direction, travellers, passengerCount }
  * or { ok: false, error }.
  */
 function parseOmniboxInput(text) {
   text = text.trim().toLowerCase();
 
   // 1. Extract optional direction pair from the start
-  // "from hel", "from ab", "to hel", "to ab"
   let direction = 'from_hel'; // default
   const dirPattern = /^(from|to)\s+(hel|ab)\s+/;
   const dirMatch = text.match(dirPattern);
   if (dirMatch) {
-    const verb = dirMatch[1];  // from/to
-    const station = dirMatch[2]; // hel/ab
-    // "from hel" or "to ab" → outbound leaves Hellín
-    // "from ab" or "to hel" → outbound leaves Albacete
+    const verb = dirMatch[1];
+    const station = dirMatch[2];
     if ((verb === 'from' && station === 'hel') || (verb === 'to' && station === 'ab')) {
       direction = 'from_hel';
     } else {
@@ -169,43 +199,89 @@ function parseOmniboxInput(text) {
     text = text.substring(dirMatch[0].length);
   }
 
-  // 2. Try to match: <outbound_date> return <return_date> <travellers>
-  let outboundRaw, returnRaw, travellerText;
+  // 2. Split on "return"/"vuelta" keyword
+  let outboundPart, returnPart, hasReturn;
 
-  const roundPattern = /^(.+?)\s+(?:return|vuelta)\s+(\S+)(?:\s+(.+))?$/;
-  const roundMatch = text.match(roundPattern);
+  const returnSplit = text.match(/^(.+?)\s+(?:return|vuelta)\b\s*(.*)$/);
 
-  if (roundMatch) {
-    outboundRaw = roundMatch[1];
-    returnRaw = roundMatch[2];
-    travellerText = roundMatch[3] || '';
+  if (returnSplit) {
+    hasReturn = true;
+    outboundPart = returnSplit[1].trim();
+    returnPart = returnSplit[2].trim();
   } else {
-    // One-way: <outbound_date> <travellers>
-    // First token is the date, rest is travellers
-    const parts = text.match(/^(\S+)(?:\s+(.+))?$/);
-    if (!parts) {
-      return { ok: false, error: 'Usage: [from/to hel/ab] 15apr [return 20apr] mom and me' };
-    }
-    outboundRaw = parts[1];
-    returnRaw = null;
-    travellerText = parts[2] || '';
+    hasReturn = false;
+    outboundPart = text;
+    returnPart = null;
   }
 
-  // 3. Parse dates
+  // 3. Parse outbound: first token is date, then optional time word, rest is travellers (if no return)
+  //    outboundPart = "<date> [time]" (if return exists) or "<date> [time] <travellers>" (if one-way)
+  let outboundRaw, outboundTime, travellerText;
+
+  // Extract the first token as the date
+  const firstToken = outboundPart.match(/^(\S+)(?:\s+(.*))?$/);
+  if (!firstToken) {
+    return { ok: false, error: 'Usage: [from/to hel/ab] 15apr [morning/evening] [return [20apr] [morning/evening]] mom and me' };
+  }
+  outboundRaw = firstToken[1];
+  let outboundRemainder = firstToken[2] || '';
+
+  // Extract time from the remainder
+  const outboundTimeResult = extractTime(outboundRemainder);
+  outboundTime = outboundTimeResult.time || 'morning'; // default outbound: morning
+  outboundRemainder = outboundTimeResult.rest;
+
+  // If no return keyword, the remainder is traveller text
+  if (!hasReturn) {
+    travellerText = outboundRemainder;
+  }
+
+  // 4. Parse return part (if present): optional date, optional time, then travellers
+  let returnRaw = null, returnTime = 'evening'; // default return: evening
+
+  if (hasReturn) {
+    // returnPart may be: "<date> [time] <travellers>" or "[time] <travellers>" or "<travellers>"
+    // Try to parse the first token as a date
+    let returnRemainder = returnPart;
+
+    const returnFirstToken = returnPart.match(/^(\S+)(?:\s+(.*))?$/);
+    if (returnFirstToken) {
+      const possibleDate = parseLooseDate(returnFirstToken[1]);
+      if (possibleDate) {
+        returnRaw = returnFirstToken[1];
+        returnRemainder = returnFirstToken[2] || '';
+      }
+      // If not a date, the entire returnPart is [time] + travellers (date defaults to outbound)
+    }
+
+    // Extract time from remainder
+    const returnTimeResult = extractTime(returnRemainder);
+    if (returnTimeResult.time) {
+      returnTime = returnTimeResult.time;
+    }
+    travellerText = returnTimeResult.rest;
+  }
+
+  // 5. Parse dates
   const outboundDate = parseLooseDate(outboundRaw);
   if (!outboundDate) {
     return { ok: false, error: `No entendí la fecha de ida: "${outboundRaw}"\n\nFormatos válidos: 15apr, 15/04, april 15` };
   }
 
   let returnDate = null;
-  if (returnRaw) {
-    returnDate = parseLooseDate(returnRaw);
-    if (!returnDate) {
-      return { ok: false, error: `No entendí la fecha de vuelta: "${returnRaw}"\n\nFormatos válidos: 20apr, 20/04, april 20` };
+  if (hasReturn) {
+    if (returnRaw) {
+      returnDate = parseLooseDate(returnRaw);
+      if (!returnDate) {
+        return { ok: false, error: `No entendí la fecha de vuelta: "${returnRaw}"\n\nFormatos válidos: 20apr, 20/04, april 20` };
+      }
+    } else {
+      // Default return date = same as outbound
+      returnDate = { ...outboundDate };
     }
   }
 
-  // 4. Smart year rollover
+  // 6. Smart year rollover
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const outboundJs = new Date(outboundDate.year, outboundDate.month - 1, outboundDate.day);
@@ -220,7 +296,16 @@ function parseOmniboxInput(text) {
     }
   }
 
-  // 5. Parse travellers
+  // 7. Validate: same date + same time on a return trip is an error
+  if (returnDate &&
+      outboundDate.day === returnDate.day &&
+      outboundDate.month === returnDate.month &&
+      outboundDate.year === returnDate.year &&
+      outboundTime === returnTime) {
+    return { ok: false, error: `Ida y vuelta el mismo día (${outboundDate.day}/${outboundDate.month}) con el mismo horario (${outboundTime}).\n\nUsa morning/evening para diferenciar.` };
+  }
+
+  // 8. Parse travellers
   const travellers = parseTravellers(travellerText);
   if (!travellers) {
     return { ok: false, error: 'Falta quién viaja.\n\nEjemplos: mom and me, dad and me, my parents and me, all 3, me' };
@@ -230,6 +315,8 @@ function parseOmniboxInput(text) {
     ok: true,
     outboundDate,
     returnDate,
+    outboundTime,
+    returnTime: hasReturn ? returnTime : null,
     direction,
     travellers,
     passengerCount: travellers.length
@@ -344,6 +431,8 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
     renfeState: 'OPEN_RENFE',
     outboundDate: parsed.outboundDate,
     returnDate: parsed.returnDate,
+    outboundTime: parsed.outboundTime,
+    returnTime: parsed.returnTime,
     direction: parsed.direction,
     travellers: parsed.travellers,
     passengerCount: parsed.passengerCount,
