@@ -329,11 +329,8 @@ function parseOmniboxInput(text) {
     return { ok: false, error: `Round trip on the same day (${outboundDate.day}/${outboundDate.month}) with the same time preference (${outboundTime}).\n\nUse morning/evening to differentiate.` };
   }
 
-  // 8. Parse travellers
-  const travellers = parseTravellers(travellerText);
-  if (!travellers) {
-    return { ok: false, error: 'Missing travellers.\n\nExamples: mom and me, dad and me, my parents and me, all 3, me' };
-  }
+  // 8. Parse travellers (default: mom and dad)
+  const travellers = parseTravellers(travellerText) || ['mom', 'dad'];
 
   return {
     ok: true,
