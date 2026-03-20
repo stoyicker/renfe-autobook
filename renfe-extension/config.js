@@ -33,6 +33,21 @@ const CONFIG = {
   }
 };
 
+// ============================================================
+// TRAVELLER PROFILES
+// ============================================================
+// Maps omnibox traveller keywords to match strings for the
+// "viajero frecuente" dropdown on the traveller data page.
+// matchText is matched (case-insensitive) against option text.
+// ============================================================
+
+const TRAVELLER_PROFILES = {
+  me:  { matchText: 'DÍAZ-BENITO SORIANO' },
+  dad: { matchText: 'DIAZ-BENITO PERONA' },
+  mom: { matchText: 'SORIANO MATEO' }
+};
+
 if (typeof window !== 'undefined') {
   window.RENFE_CONFIG = CONFIG;
+  window.RENFE_TRAVELLER_PROFILES = TRAVELLER_PROFILES;
 }

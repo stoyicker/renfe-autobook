@@ -8,7 +8,7 @@
 //
 // State flow:
 //   OPEN_RENFE → FILL_SEARCH_FORM → SELECT_OUTBOUND_TRAIN
-//   → SELECT_RETURN_TRAIN → SELECT_TRAVELLERS → SELECT_PAYMENT
+//   → SELECT_TRAVELLERS → SKIP_UPSELL → SELECT_PAYMENT
 //   → AWAIT_CONFIRMATION
 //
 // DISMISS_POPUPS runs before every state as a guard.
@@ -20,6 +20,7 @@
 
   const SEL = window.RENFE_SELECTORS;
   const CFG = window.RENFE_CONFIG;
+  const PROFILES = window.RENFE_TRAVELLER_PROFILES;
 
   // --- Helpers ---------------------------------------------------------------
 
@@ -88,6 +89,35 @@
         setTimeout(check, pollMs);
       };
       check();
+    });
+  }
+
+  /**
+   * Wait for the DOM to settle — resolves once no mutations have occurred
+   * for `quietMs` milliseconds. Times out after `timeoutMs`.
+   */
+  function waitForDomSettle(targetNode = document.body, quietMs = 500, timeoutMs = 15000) {
+    return new Promise((resolve) => {
+      let timer = null;
+      const observer = new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          observer.disconnect();
+          resolve();
+        }, quietMs);
+      });
+      observer.observe(targetNode, { childList: true, subtree: true, attributes: true });
+      // Start the quiet timer immediately in case no mutations happen at all
+      timer = setTimeout(() => {
+        observer.disconnect();
+        resolve();
+      }, quietMs);
+      // Hard timeout
+      setTimeout(() => {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      }, timeoutMs);
     });
   }
 
@@ -774,14 +804,113 @@
     }
   }
 
-  async function selectTravellers() {
-    console.log('[Renfe] SELECT_TRAVELLERS — not yet implemented');
-    await fail('SELECT_TRAVELLERS', 'Este paso aún no está implementado.');
+  // --- Traveller profile selection --------------------------------------------
+
+  /**
+   * Find the option in a <select> whose text contains the given matchText.
+   * Returns the option's value, or null if not found.
+   */
+  function findProfileOption(selectEl, matchText) {
+    const needle = matchText.toUpperCase();
+    for (const opt of selectEl.options) {
+      const text = opt.textContent.replace(/\s+/g, ' ').trim().toUpperCase();
+      if (text.includes(needle)) {
+        return opt.value;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Select a traveller profile in a single passenger slot.
+   * @param {number} idx - 0-indexed passenger slot
+   * @param {string} travellerKey - 'me', 'dad', or 'mom'
+   */
+  async function selectTravellerProfile(idx, travellerKey) {
+    const profile = PROFILES[travellerKey];
+    if (!profile) throw new Error(`Unknown traveller key: "${travellerKey}"`);
+
+    // Expand the collapsible section if collapsed
+    const toggleBtn = document.querySelector(`#butonDatosPersonales${idx}`);
+    if (toggleBtn && toggleBtn.getAttribute('aria-expanded') === 'false') {
+      toggleBtn.click();
+      console.log(`[Renfe] Expanded passenger ${idx} section`);
+      await delay(800);
+    }
+
+    // Find the profile dropdown
+    const select = document.querySelector(`#viajeroFrecuente${idx}`);
+    if (!select) throw new Error(`Profile dropdown not found: #viajeroFrecuente${idx}`);
+
+    // Find the matching option
+    const optionValue = findProfileOption(select, profile.matchText);
+    if (optionValue === null) {
+      throw new Error(`Profile "${travellerKey}" (${profile.matchText}) not found in dropdown #viajeroFrecuente${idx}`);
+    }
+
+    // Check if already selected
+    if (select.value === optionValue) {
+      console.log(`[Renfe] Passenger ${idx}: "${travellerKey}" already selected — skipping`);
+      return;
+    }
+
+    // Select the profile
+    select.value = optionValue;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    console.log(`[Renfe] Passenger ${idx}: selected "${travellerKey}" (value=${optionValue})`);
+
+    // Wait for form fields to populate — watch DOM until mutations settle
+    await waitForDomSettle(document.body, 500, 15000);
+  }
+
+  async function selectTravellers(travellers) {
+    try {
+      await delay(2000); // let the page settle
+
+      for (let i = 0; i < travellers.length; i++) {
+        await selectTravellerProfile(i, travellers[i]);
+      }
+
+      console.log('[Renfe] All traveller profiles selected');
+
+      // Click continue button
+      const submitBtn = document.querySelector('#submitpersonaliza');
+      if (!submitBtn) throw new Error('Continue button #submitpersonaliza not found');
+      submitBtn.click();
+      console.log('[Renfe] Clicked continue on traveller page');
+
+      await setState('SKIP_UPSELL');
+    } catch (err) {
+      console.error('[Renfe] selectTravellers error:', err);
+      await fail('SELECT_TRAVELLERS', err.message);
+    }
+  }
+
+  // --- Upsell skip (pet transport, bike room, etc.) ---------------------------
+
+  async function skipUpsell() {
+    try {
+      await delay(2000); // let the page settle
+
+      // Wait for the continue button to appear
+      const submitBtn = await waitFor(
+        () => document.querySelector('#submitFormaPago'),
+        15000
+      );
+      submitBtn.click();
+      console.log('[Renfe] Skipped upsell page');
+
+      await setState('SELECT_PAYMENT');
+    } catch (err) {
+      console.error('[Renfe] skipUpsell error:', err);
+      await fail('SKIP_UPSELL', err.message);
+    }
   }
 
   async function selectPayment() {
     console.log('[Renfe] SELECT_PAYMENT — not yet implemented');
-    await fail('SELECT_PAYMENT', 'Este paso aún no está implementado.');
+    await fail('SELECT_PAYMENT', 'Not yet implemented.');
   }
 
   async function awaitConfirmation() {
@@ -822,7 +951,11 @@
         break;
 
       case 'SELECT_TRAVELLERS':
-        await selectTravellers();
+        await selectTravellers(data.travellers || []);
+        break;
+
+      case 'SKIP_UPSELL':
+        await skipUpsell();
         break;
 
       case 'SELECT_PAYMENT':
