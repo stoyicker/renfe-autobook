@@ -921,9 +921,50 @@
   }
 
   async function selectPayment() {
-    if (!await requireLogin('SELECT_PAYMENT')) return;
-    console.log('[Renfe] SELECT_PAYMENT — not yet implemented');
-    await fail('SELECT_PAYMENT', 'Not yet implemented.');
+    try {
+      await delay(2000);
+      if (!await requireLogin('SELECT_PAYMENT')) return;
+
+      // 1. Select payment method (Tarjeta Renfe radio button)
+      const radio = await waitFor(
+        () => document.querySelector('#datosPago_cdgoFormaPago_tarjetaRenfe'),
+        15000
+      );
+      if (!radio.checked) {
+        radio.click();
+        console.log('[Renfe] Selected Tarjeta Renfe payment method');
+        await delay(500);
+      } else {
+        console.log('[Renfe] Tarjeta Renfe already selected');
+      }
+
+      // 2. Ensure both checkboxes are checked (don't toggle — only click if unchecked)
+      const checkbox1 = document.querySelector('#whatsappTicketNotification');
+      if (checkbox1 && !checkbox1.checked) {
+        checkbox1.click();
+        console.log('[Renfe] Checked WhatsApp notification checkbox');
+        await delay(300);
+      }
+
+      const checkbox2 = document.querySelector('#aceptarCondiciones');
+      if (!checkbox2) throw new Error('Conditions checkbox #aceptarCondiciones not found');
+      if (!checkbox2.checked) {
+        checkbox2.click();
+        console.log('[Renfe] Checked conditions checkbox');
+        await delay(300);
+      }
+
+      // 3. Click the pay button
+      const payBtn = document.querySelector('#butonPagar');
+      if (!payBtn) throw new Error('Pay button #butonPagar not found');
+      payBtn.click();
+      console.log('[Renfe] Clicked pay button');
+
+      await setState('AWAIT_CONFIRMATION');
+    } catch (err) {
+      console.error('[Renfe] selectPayment error:', err);
+      await fail('SELECT_PAYMENT', err.message);
+    }
   }
 
   async function awaitConfirmation() {
