@@ -611,6 +611,22 @@
     return true;
   }
 
+  /**
+   * Check login and show error dialog if not logged in.
+   * Returns true if logged in, false if not (and error was shown).
+   */
+  async function requireLogin(stepName) {
+    if (!isLoggedIn()) {
+      chrome.runtime.sendMessage({
+        type: 'SHOW_ERROR',
+        error: 'No active session on Renfe. Log in first and try again.'
+      });
+      await setState('DONE');
+      return false;
+    }
+    return true;
+  }
+
   // --- Fill search form (main orchestrator) -----------------------------------
 
   async function fillSearchForm(outboundDate, returnDate, passengerCount, direction) {
@@ -620,14 +636,7 @@
     await delay(1500); // let the SPA settle
 
     // Check for active session
-    if (!isLoggedIn()) {
-      chrome.runtime.sendMessage({
-        type: 'SHOW_ERROR',
-        error: 'No active session on Renfe. Log in first and try again.'
-      });
-      await setState('DONE');
-      return;
-    }
+    if (!await requireLogin('FILL_SEARCH_FORM')) return;
 
     // Pick station config based on direction
     // "from_hel" → outbound: Hellín → Albacete (CFG.go)
@@ -786,6 +795,7 @@
 
   async function selectOutboundTrain(outboundTime, returnTime) {
     try {
+      if (!await requireLogin('SELECT_OUTBOUND_TRAIN')) return;
       await selectTrip(outboundTime, 'outbound');
 
       const data = await chrome.storage.session.get(['returnDate']);
@@ -867,6 +877,7 @@
   async function selectTravellers(travellers) {
     try {
       await delay(2000); // let the page settle
+      if (!await requireLogin('SELECT_TRAVELLERS')) return;
 
       for (let i = 0; i < travellers.length; i++) {
         await selectTravellerProfile(i, travellers[i]);
@@ -892,6 +903,7 @@
   async function skipUpsell() {
     try {
       await delay(2000); // let the page settle
+      if (!await requireLogin('SKIP_UPSELL')) return;
 
       // Wait for the continue button to appear
       const submitBtn = await waitFor(
@@ -909,6 +921,7 @@
   }
 
   async function selectPayment() {
+    if (!await requireLogin('SELECT_PAYMENT')) return;
     console.log('[Renfe] SELECT_PAYMENT — not yet implemented');
     await fail('SELECT_PAYMENT', 'Not yet implemented.');
   }
