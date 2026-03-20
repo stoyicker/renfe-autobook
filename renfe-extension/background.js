@@ -448,17 +448,24 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
   console.log('[Renfe Extension] Parsed:', parsed);
 
   // Store the booking request and set initial state
-  await chrome.storage.session.set({
+  // Clear all previous booking data before writing new values,
+  // so stale keys (e.g. returnDate from a prior round-trip) don't persist.
+  await chrome.storage.session.remove([
+    'renfeState', 'outboundDate', 'returnDate', 'outboundTime', 'returnTime',
+    'direction', 'travellers', 'passengerCount', 'errorCount'
+  ]);
+  const sessionData = {
     renfeState: 'OPEN_RENFE',
     outboundDate: parsed.outboundDate,
-    returnDate: parsed.returnDate,
     outboundTime: parsed.outboundTime,
-    returnTime: parsed.returnTime,
     direction: parsed.direction,
     travellers: parsed.travellers,
     passengerCount: parsed.passengerCount,
     errorCount: 0
-  });
+  };
+  if (parsed.returnDate) sessionData.returnDate = parsed.returnDate;
+  if (parsed.returnTime) sessionData.returnTime = parsed.returnTime;
+  await chrome.storage.session.set(sessionData);
 
   // Navigate to renfe.com or re-trigger the content script if already there
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
