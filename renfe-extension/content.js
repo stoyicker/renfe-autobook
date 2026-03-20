@@ -9,7 +9,7 @@
 // State flow:
 //   OPEN_RENFE → FILL_SEARCH_FORM → SELECT_OUTBOUND_TRAIN
 //   → SELECT_TRAVELLERS → SKIP_UPSELL → SELECT_PAYMENT
-//   → AWAIT_CONFIRMATION
+//   → AWAIT_CONFIRMATION → POST_PURCHASE
 //
 // DISMISS_POPUPS runs before every state as a guard.
 // On error → ERROR state + notification.
@@ -918,6 +918,11 @@
     await setState('DONE');
   }
 
+  async function postPurchase() {
+    console.log('[Renfe] POST_PURCHASE — not yet implemented');
+    await fail('POST_PURCHASE', 'Not yet implemented.');
+  }
+
   // --- Main state machine ----------------------------------------------------
 
   async function run() {
@@ -932,6 +937,18 @@
     }
 
     console.log(`[Renfe] Running state: ${state}`, data);
+
+    // Post-search states only run on venta.renfe.com — if we're elsewhere
+    // (e.g. redirected through queue-it.net or back to www.renfe.com),
+    // skip and let the state persist until we land on the right page.
+    const postSearchStates = [
+      'SELECT_OUTBOUND_TRAIN', 'SELECT_TRAVELLERS', 'SKIP_UPSELL',
+      'SELECT_PAYMENT', 'AWAIT_CONFIRMATION', 'POST_PURCHASE'
+    ];
+    if (postSearchStates.includes(state) && window.location.hostname !== 'venta.renfe.com') {
+      console.log(`[Renfe] State ${state} requires venta.renfe.com, currently on ${window.location.hostname} — waiting for redirect`);
+      return;
+    }
 
     dismissPopups();
 
@@ -964,6 +981,10 @@
 
       case 'AWAIT_CONFIRMATION':
         await awaitConfirmation();
+        break;
+
+      case 'POST_PURCHASE':
+        await postPurchase();
         break;
 
       default:
