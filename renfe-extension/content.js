@@ -101,7 +101,7 @@
         } else if (Date.now() - start > timeoutMs) {
           resolve();
         } else {
-          requestAnimationFrame(check);
+          setTimeout(check, 200);
         }
       };
       check();
