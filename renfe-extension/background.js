@@ -504,35 +504,4 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
   }
 
-  // --- Recorder: save step recording to disk as a JSON download ---
-  if (msg.type === 'RECORDER_SAVE_TO_DISK') {
-    const { stepLabel, events } = msg;
-    const payload = {
-      step: stepLabel,
-      recordedAt: new Date().toISOString(),
-      url: events[0]?.url || '',
-      eventCount: events.length,
-      events: events,
-    };
-    const json = JSON.stringify(payload, null, 2);
-    // Service workers can't use Blob/createObjectURL — use a data: URI instead
-    const dataUrl = 'data:application/json;base64,' + btoa(unescape(encodeURIComponent(json)));
-    const safeName = stepLabel.replace(/[^a-z0-9_-]/gi, '_') || 'unnamed_step';
-
-    chrome.downloads.download({
-      url: dataUrl,
-      filename: `renfe-recordings/${safeName}.json`,
-      saveAs: false,
-      conflictAction: 'overwrite'
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        console.error('[Renfe] Download failed:', chrome.runtime.lastError.message);
-        sendResponse({ ok: false, error: chrome.runtime.lastError.message });
-      } else {
-        console.log(`[Renfe] Recording saved: renfe-recordings/${safeName}.json (download ${downloadId})`);
-        sendResponse({ ok: true, filename: `renfe-recordings/${safeName}.json` });
-      }
-    });
-    return true; // keep sendResponse channel open for async
-  }
 });

@@ -16,11 +16,6 @@
       font-size: 16px;
       color: #6d28d9;
     }
-    .section {
-      margin-bottom: 14px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid #e5e7eb;
-    }
     .row {
       display: flex;
       justify-content: space-between;
@@ -46,113 +41,36 @@
     .state-done     { background: #d1fae5; color: #065f46; }
     .state-error    { background: #fee2e2; color: #991b1b; }
 
-    /* Recorder */
-    .rec-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
+    .btn-reset {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+      background: #e5e7eb;
+      color: #374151;
     }
-    .rec-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #9ca3af;
-      display: inline-block;
-    }
-    .rec-dot.active {
-      background: #ef4444;
-      animation: blink 1s ease-in-out infinite;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-    .rec-title { font-weight: 600; font-size: 14px; }
-    #event-count { font-size: 12px; color: #666; margin-left: auto; }
-
-    .step-row { margin-bottom: 8px; }
-    .step-row label { font-size: 12px; color: #666; display: block; margin-bottom: 3px; }
-    #step-label {
-      width: 100%; padding: 6px 8px;
-      border: 1px solid #d1d5db; border-radius: 4px;
-      font-size: 13px; box-sizing: border-box;
-    }
-
-    .btn-row { display: flex; gap: 6px; margin-bottom: 6px; }
-    .btn {
-      flex: 1; padding: 8px; border: none; border-radius: 6px;
-      font-size: 13px; cursor: pointer; font-weight: 500;
-    }
-    .btn:disabled { opacity: 0.4; cursor: default; }
-    .btn-record  { background: #ef4444; color: white; }
-    .btn-record:hover:not(:disabled) { background: #dc2626; }
-    .btn-stop    { background: #f59e0b; color: white; }
-    .btn-stop:hover:not(:disabled) { background: #d97706; }
-    .btn-clear   { background: #e5e7eb; color: #374151; }
-    .btn-clear:hover:not(:disabled) { background: #d1d5db; }
-    .btn-reset   { background: #e5e7eb; color: #374151; }
     .btn-reset:hover { background: #d1d5db; }
-
-    #status-msg {
-      font-size: 11px;
-      color: #065f46;
-      margin-top: 4px;
-      min-height: 16px;
-    }
-    .saved-files {
-      margin-top: 8px;
-      font-size: 11px;
-      color: #666;
-    }
-    .saved-files div {
-      padding: 2px 0;
-      font-family: 'Consolas', monospace;
-    }
   </style>
 </head>
 <body>
-  <!-- Booking status -->
-  <div class="section">
-    <h2>Renfe Easy Booking</h2>
-    <div class="row">
-      <span class="label">Estado:</span>
-      <span id="state" class="state-idle">-</span>
-    </div>
-    <div class="row">
-      <span class="label">Ida:</span>
-      <span id="outbound" class="value">-</span>
-    </div>
-    <div class="row">
-      <span class="label">Vuelta:</span>
-      <span id="return" class="value">-</span>
-    </div>
-    <button class="btn btn-reset" id="reset-btn" style="width:100%;margin-top:6px;">Reiniciar estado</button>
+  <h2>Renfe Easy Booking</h2>
+  <div class="row">
+    <span class="label">Estado:</span>
+    <span id="state" class="state-idle">-</span>
   </div>
-
-  <!-- Recorder -->
-  <div>
-    <div class="rec-header">
-      <span class="rec-dot" id="rec-dot"></span>
-      <span class="rec-title">Recorder</span>
-      <span id="event-count">0 events</span>
-    </div>
-
-    <div class="step-row">
-      <label for="step-label">Step label:</label>
-      <input type="text" id="step-label" placeholder="e.g. fill_search_form">
-    </div>
-
-    <div class="btn-row">
-      <button class="btn btn-record" id="rec-start">Record</button>
-      <button class="btn btn-stop" id="rec-stop" disabled>Stop &amp; Save</button>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-clear" id="rec-clear">Clear</button>
-    </div>
-
-    <div id="status-msg"></div>
-    <div class="saved-files" id="saved-files"></div>
+  <div class="row">
+    <span class="label">Ida:</span>
+    <span id="outbound" class="value">-</span>
   </div>
+  <div class="row">
+    <span class="label">Vuelta:</span>
+    <span id="return" class="value">-</span>
+  </div>
+  <button class="btn-reset" id="reset-btn">Reiniciar estado</button>
 
   <script src="popup.js"></script>
 </body>

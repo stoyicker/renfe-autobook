@@ -5,10 +5,8 @@
   "description": "Automates Renfe train ticket booking from the omnibox. Type 'renfe go 15apr return 20apr' to start.",
   "permissions": [
     "storage",
-    "notifications",
     "scripting",
-    "activeTab",
-    "downloads"
+    "activeTab"
   ],
   "host_permissions": [
     "*://*.renfe.com/*"
@@ -22,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["*://*.renfe.com/*"],
-      "js": ["config.js", "selectors.js", "recorder.js", "content.js"],
+      "js": ["config.js", "selectors.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
