@@ -616,6 +616,12 @@
    * Returns true if logged in, false if not (and error was shown).
    */
   async function requireLogin(stepName) {
+    // Login detection only works on www.renfe.com — on venta.renfe.com
+    // the DOM is different and gives false negatives. Since you can only
+    // reach venta.renfe.com by passing the search page (which checks login),
+    // skip the check there.
+    if (window.location.hostname === 'venta.renfe.com') return true;
+
     if (!isLoggedIn()) {
       chrome.runtime.sendMessage({
         type: 'SHOW_ERROR',
@@ -633,7 +639,7 @@
     await waitForLoading();
     dismissPopups();
 
-    await delay(1500); // let the SPA settle
+    await waitForDomSettle(document.body, 500, 10000);
 
     // Check for active session
     if (!await requireLogin('FILL_SEARCH_FORM')) return;
@@ -724,18 +730,14 @@
    * @param {string} leg - 'outbound' or 'return' (for error messages)
    */
   async function selectTrip(timePreference, leg) {
-    await delay(2000); // let the page settle
-
     // outbound uses "i" (ida), return uses "v" (vuelta)
     const prefix = leg === 'return' ? 'v' : 'i';
 
-    // Find available trains
-    const train1 = document.querySelector(`#tren_${prefix}_1`);
+    // Wait for train list to appear
+    const train1 = await waitFor(
+      () => document.querySelector(`#tren_${prefix}_1`), 15000
+    ).catch(() => { throw new Error(`No trains found for ${leg} trip.`); });
     const train2 = document.querySelector(`#tren_${prefix}_2`);
-
-    if (!train1) {
-      throw new Error(`No trains found for ${leg} trip.`);
-    }
 
     // Build list of available trains with their time categories
     const trains = [];
@@ -796,18 +798,23 @@
   async function selectOutboundTrain(outboundTime, returnTime) {
     try {
       if (!await requireLogin('SELECT_OUTBOUND_TRAIN')) return;
-      await selectTrip(outboundTime, 'outbound');
 
       const data = await chrome.storage.session.get(['returnDate']);
-      if (data.returnDate) {
+      const isRoundTrip = !!data.returnDate;
+
+      if (!isRoundTrip) {
+        // One-way: clicking btnSeleccionar will navigate to the traveller page
+        // immediately, so pre-set the state before the page unloads.
+        await setState('SELECT_TRAVELLERS');
+        await selectTrip(outboundTime, 'outbound');
+        // Page navigates — code below may not execute.
+      } else {
+        await selectTrip(outboundTime, 'outbound');
         // Return trip list loads on the same page — wait for it to refresh
         console.log('[Renfe] Waiting for return trip list to load...');
-        await delay(2000);
-        await waitFor(() => document.querySelector('#tren_v_1'), 15000);
         await selectTrip(returnTime, 'return');
+        await setState('SELECT_TRAVELLERS');
       }
-
-      await setState('SELECT_TRAVELLERS');
     } catch (err) {
       console.error('[Renfe] selectOutboundTrain error:', err);
       await fail('SELECT_OUTBOUND_TRAIN', err.message);
@@ -876,7 +883,7 @@
 
   async function selectTravellers(travellers) {
     try {
-      await delay(2000); // let the page settle
+      await waitFor(() => document.querySelector('#butonDatosPersonales0'), 15000);
       if (!await requireLogin('SELECT_TRAVELLERS')) return;
 
       for (let i = 0; i < travellers.length; i++) {
@@ -902,7 +909,6 @@
 
   async function skipUpsell() {
     try {
-      await delay(2000); // let the page settle
       if (!await requireLogin('SKIP_UPSELL')) return;
 
       // Wait for the continue button to appear
@@ -922,7 +928,6 @@
 
   async function selectPayment() {
     try {
-      await delay(2000);
       if (!await requireLogin('SELECT_PAYMENT')) return;
 
       // 1. Select payment method (Tarjeta Renfe radio button)
@@ -968,13 +973,33 @@
   }
 
   async function awaitConfirmation() {
-    console.log('[Renfe] AWAIT_CONFIRMATION — not yet implemented');
-    await setState('DONE');
+    await setState('POST_PURCHASE');
+    await postPurchase();
   }
 
   async function postPurchase() {
-    console.log('[Renfe] POST_PURCHASE — not yet implemented');
-    await fail('POST_PURCHASE', 'Not yet implemented.');
+    try {
+      const emailInput = await waitFor(
+        () => document.querySelector('#emailPassbook_1'),
+        15000
+      );
+      emailInput.value = 'jorgequim5@hotmail.com';
+      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+      emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+      console.log('[Renfe] Entered e-mail for ticket delivery');
+
+      await delay(300);
+
+      const sendBtn = document.querySelector('#enviarPassbook_1');
+      if (!sendBtn) throw new Error('Send button #enviarPassbook_1 not found');
+      sendBtn.click();
+      console.log('[Renfe] Clicked send ticket button');
+
+      await setState('DONE');
+    } catch (err) {
+      console.error('[Renfe] postPurchase error:', err);
+      await fail('POST_PURCHASE', err.message);
+    }
   }
 
   // --- Main state machine ----------------------------------------------------
@@ -1009,7 +1034,6 @@
     switch (state) {
       case 'OPEN_RENFE':
         await setState('FILL_SEARCH_FORM');
-        await delay(2000);
         await fillSearchForm(data.outboundDate, data.returnDate, data.passengerCount || 1, data.direction);
         break;
 
