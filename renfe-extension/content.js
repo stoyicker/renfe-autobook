@@ -810,8 +810,9 @@
         // Page navigates — code below may not execute.
       } else {
         await selectTrip(outboundTime, 'outbound');
-        // Return trip list loads on the same page — wait for it to refresh
+        // Return trip list reloads on the same page — wait for DOM to settle
         console.log('[Renfe] Waiting for return trip list to load...');
+        await waitForDomSettle(document.body, 2000, 15000);
         await selectTrip(returnTime, 'return');
         await setState('SELECT_TRAVELLERS');
       }
