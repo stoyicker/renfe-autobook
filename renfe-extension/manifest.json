@@ -30,5 +30,7 @@
     "default_popup": "popup.html",
     "default_title": "Renfe Easy Booking"
   },
-  "icons": {}
+  "icons": {
+    "128": "icon128.png"
+  }
 }
