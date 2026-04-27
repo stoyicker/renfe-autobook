@@ -471,7 +471,7 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     const url = tab.url || '';
-    if (url.startsWith('https://www.renfe.com/es/es')) {
+    if (url.startsWith('https://venta.renfe.com/')) {
       // Already on Renfe — tell the content script to re-run
       try {
         await chrome.tabs.sendMessage(tab.id, { type: 'RENFE_RUN' });
@@ -480,7 +480,7 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
         chrome.tabs.reload(tab.id);
       }
     } else {
-      chrome.tabs.update(tab.id, { url: 'https://www.renfe.com/es/es' });
+      chrome.tabs.update(tab.id, { url: 'https://venta.renfe.com/' });
     }
   }
 });

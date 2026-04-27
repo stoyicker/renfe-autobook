@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Renfe Easy Booking",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automates Renfe train ticket booking from the omnibox. Type 'renfe go 15apr return 20apr' to start.",
   "permissions": [
     "storage",

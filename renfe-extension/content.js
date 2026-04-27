@@ -616,12 +616,6 @@
    * Returns true if logged in, false if not (and error was shown).
    */
   async function requireLogin(stepName) {
-    // Login detection only works on www.renfe.com — on venta.renfe.com
-    // the DOM is different and gives false negatives. Since you can only
-    // reach venta.renfe.com by passing the search page (which checks login),
-    // skip the check there.
-    if (window.location.hostname === 'venta.renfe.com') return true;
-
     if (!isLoggedIn()) {
       chrome.runtime.sendMessage({
         type: 'SHOW_ERROR',
